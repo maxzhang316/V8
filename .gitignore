@@ -1,0 +1,47 @@
+
+# ==========================
+# Python cache
+# ==========================
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+
+# ==========================
+# Virtual environments
+# ==========================
+venv/
+.venv/
+env/
+ENV/
+
+# ==========================
+# PyCharm
+# ==========================
+.idea/
+
+# ==========================
+# Temporary files
+# ==========================
+*.log
+*.tmp
+*.bak
+*.swp
+
+# ==========================
+# OS-generated files
+# ==========================
+.DS_Store
+Thumbs.db
+
+# ==========================
+# Sensitive configuration
+# ==========================
+.env
+.env.*
+!.env.example
+# Ignore all generated reconstruction outputs
+/outputs/*
+
+# Keep the outputs directory in Git
+!/outputs/.gitkeep

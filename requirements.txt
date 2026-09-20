@@ -1,0 +1,24 @@
+# V8 unified reconstruction environment (Adam + Pty-Chi ePIE/LSQML)
+# Derived from the supplied Adam / Pty-Chi package snapshots.
+# Tested compatibility of the merged environment is NOT yet established.
+# Install a matching GPU-enabled PyTorch build first; see INSTALL_V8.md.
+# Public pins below accept an already installed matching +cuXXX build.
+
+torch==2.14.0
+torchvision==0.29.0
+ptychi==2.1.0
+
+numpy==2.4.6
+scipy==1.17.1
+h5py==3.16.0
+matplotlib==3.11.1
+PyYAML==6.0.3
+
+# Packages used by the existing Pty-Chi environment / conversion workflow
+pandas==3.0.5
+scikit-image==0.26.0
+scikit-learn==1.9.1
+tifffile==2026.3.3
+imageio==2.37.4
+tqdm==4.70.1
+pydantic==2.13.5

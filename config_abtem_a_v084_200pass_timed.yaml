@@ -1,0 +1,139 @@
+project:
+  name: MoS2_ABTEM_DatasetA_Coherent_1mode_V084_200pass_Timed
+  device: cuda
+  seed: 0
+data:
+  prepared_npz_path: data/abtem_dataset_a_v8.npz
+forward:
+  detector_shape:
+  - 124
+  - 124
+  eps: 1.0e-10
+reconstruction:
+  iterations: 200
+  batch_size: 32
+  shuffle: true
+  n_modes: 1
+  probe_mode_init_power: 0.0
+  probe_mode_basis: hermite
+  probe_kv: 80.0
+  probe_conv_angle_mrad: 24.9
+  probe_C10_angstrom: 0.0
+  optimize_positions: false
+  lr_obja: 0.004
+  lr_objp: 0.004
+  lr_probe: 0.0003
+  lr_probe_pos_shifts: 0.0
+  adam_betas:
+  - 0.9
+  - 0.999
+  adam_eps: 1.0e-08
+  stages:
+    object_start: 1
+    probe_start: 1
+    position_start: 999999
+    lr_warmup_iters: 30
+    final_lr_scale: 0.45
+  gradient_clip:
+    obja: 2.0
+    objp: 2.0
+    probe: 1.0
+    probe_pos_shifts: 0.0
+  data_loss:
+    amplitude_weight: 0.0
+    intensity_weight: 1.0
+    eps: 1.0e-08
+    charbonnier_eps: 0.001
+regularization:
+  probe_intensity_anchor:
+    enabled: false
+    weight_start: 0.0
+    weight_end: 0.0
+    start_iter: 1
+  probe_k_support:
+    enabled: false
+    weight: 0.0
+    radius_scale: 1.15
+    start_iter: 1
+  position_huber:
+    enabled: false
+    weight: 0.0
+    delta_px: 0.5
+    start_iter: 999999
+  object_amplitude_soft_bounds:
+    enabled: false
+    weight: 0.0
+    lower: 0.25
+    upper: 2.1
+quality_guard:
+  enabled: false
+  probe_anchor_soft_threshold: 0.25
+  probe_anchor_hard_threshold: 0.45
+  minimum_probe_lr_scale: 0.5
+  max_position_step_per_iteration_px: 0.0
+constraints:
+  object_blur:
+    enabled: false
+    start_iter: 1
+    end_iter: null
+    step: 1
+    kernel_size: 5
+    std: 0.0
+    obj_type: both
+  obja_thresh:
+    enabled: false
+    start_iter: 1
+    step: 1
+    end_iter: null
+    relax: 0.02
+    thresh:
+    - 0.85
+    - 1.15
+  objp_positive:
+    enabled: false
+    start_iter: 1
+    step: 1
+    end_iter: null
+    relax: 0.1
+  ortho_pmode:
+    enabled: false
+    start_iter: 1
+    step: 1
+    end_iter: null
+  probe_mask_k:
+    enabled: false
+    start_iter: 1
+    step: 1
+    end_iter: null
+    radius: 0.45
+    width: 0.15
+    power_thresh: 0.85
+  fix_probe_int:
+    enabled: true
+    start_iter: 1
+    step: 1
+    end_iter: null
+  position_rebase:
+    enabled: false
+    start_iter: 999999
+    step: 1
+    end_iter: null
+  pos_recenter:
+    enabled: false
+    start_iter: 999999
+    step: 1
+    end_iter: null
+    relax: 0.0
+selection:
+  enabled: false
+  start_iter: 1
+  probe_anchor_weight: 0.0
+  probe_support_weight: 0.0
+  position_drift_weight: 0.0
+  restore_best_at_end: false
+output:
+  reconstruction_dir: outputs/DatasetA_Coherent_1mode_V084_200pass_Timed
+  save_every: 10
+  checkpoint_every: 10
+  forward_summary_scans: 3
+  save_last_and_best: true
