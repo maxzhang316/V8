@@ -13,6 +13,8 @@ import numpy as np
 import torch
 import ptychi
 import ptychi.api as api
+import ptychi.utils as putils
+from ptychi.api.task import PtychographyTask
 
 
 def electron_wavelength_angstrom(kv: float) -> float:
@@ -195,8 +197,8 @@ def main() -> None:
     parser.add_argument(
         "--batch-size",
         type=int,
-        default=1,
-        help="Use 1 for a classical sequential ePIE-style baseline.",
+        default=100,
+        help="Pty-Chi ePIE minibatch size. 100 matches the library default and is much faster on GPU.",
     )
     parser.add_argument("--object-alpha", type=float, default=0.1)
     parser.add_argument("--probe-alpha", type=float, default=0.1)
@@ -204,6 +206,17 @@ def main() -> None:
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--probe-c10-A", type=float, default=0.0)
     args = parser.parse_args()
+
+    # Safety guard: batch_size=1 on a 3600-pattern scan causes 3600 ePIE
+    # minibatch updates per epoch. At 100 epochs that is 360,000 updates,
+    # and each update may perform subpixel Fourier probe shifting. That is
+    # intentionally prevented here because it looks like a hang in practice.
+    if args.batch_size < 16:
+        raise ValueError(
+            f"batch_size={args.batch_size} is too small for this benchmark. "
+            "Use --batch-size 100 for the Pty-Chi native ePIE baseline. "
+            "For a quick sanity test use --epochs 1 --batch-size 100."
+        )
 
     if not torch.cuda.is_available():
         raise RuntimeError(
@@ -265,14 +278,30 @@ def main() -> None:
         c10_angstrom=float(args.probe_c10_A),
     )
 
-    modes = initialize_mixed_probe(
-        primary_probe,
-        n_modes=int(args.modes),
-        new_mode_power=float(args.probe_mode_init_power),
+    # Build the probe in Pty-Chi's native 4D shape:
+    # (n_opr_modes, n_incoherent_modes, H, W).
+    probe_guess = np.zeros(
+        (1, int(args.modes), detector_h, detector_w),
+        dtype=np.complex64,
     )
+    probe_guess[0, 0] = primary_probe
 
-    # Pty-Chi probe shape: (n_opr_modes, n_incoherent_modes, H, W).
-    probe_guess = modes[None, ...].astype(np.complex64)
+    # Use Pty-Chi's own Hermite initializer for secondary incoherent modes.
+    # For 2 modes and 0.02 this gives approximately 98% / 2% initial power.
+    if int(args.modes) > 1:
+        probe_t = torch.from_numpy(probe_guess.copy())
+        probe_t = putils.orthogonalize_initial_probe(
+            probe_t,
+            secondary_mode_energy=float(args.probe_mode_init_power),
+        )
+        probe_guess = probe_t.detach().cpu().numpy().astype(np.complex64)
+
+    probe_power_before_scale = float(np.sum(np.abs(probe_guess) ** 2))
+
+    # CRITICAL: scale the initial probe using Pty-Chi's own Fourier convention
+    # so the propagated probe intensity matches the measured diffraction power.
+    probe_guess = putils.rescale_probe(probe_guess, measured).astype(np.complex64)
+    probe_power_after_scale = float(np.sum(np.abs(probe_guess) ** 2))
 
     # Single-slice object: (1,H,W).
     object_guess = np.ones(
@@ -294,10 +323,13 @@ def main() -> None:
     # fft_shift=True preprocessing is the correct setting here.
     options.data_options.fft_shift = True
     options.data_options.wavelength_m = wavelength_m
+    options.data_options.save_data_on_device = True
 
     options.object_options.pixel_size_m = pixel_size_m
     options.object_options.optimizable = True
     options.object_options.alpha = float(args.object_alpha)
+    # Keep Pty-Chi's native object/probe scale-gauge remover enabled.
+    options.object_options.remove_object_probe_ambiguity.enabled = True
 
     options.probe_options.pixel_size_m = pixel_size_m
     options.probe_options.optimizable = True
@@ -328,6 +360,9 @@ def main() -> None:
     print("diffraction shape     :", measured.shape)
     print("object guess shape    :", object_guess.shape)
     print("probe guess shape     :", probe_guess.shape)
+    print("mean data power       :", float(np.mean(np.sum(measured, axis=(-2, -1)))))
+    print("probe power pre-scale :", probe_power_before_scale)
+    print("probe power post-scale:", probe_power_after_scale)
     print("scan position range y :", float(positions_centered_yx[:, 0].min()),
           "to", float(positions_centered_yx[:, 0].max()), "px")
     print("scan position range x :", float(positions_centered_yx[:, 1].min()),
@@ -337,11 +372,15 @@ def main() -> None:
     print("modes                 :", args.modes)
     print("epochs                :", args.epochs)
     print("batch size            :", args.batch_size)
+    n_batches = math.ceil(measured.shape[0] / int(args.batch_size))
+    print("batches / epoch       :", n_batches)
+    print("total minibatches     :", n_batches * int(args.epochs))
+    print("data kept on GPU      :", True)
     print("object alpha          :", args.object_alpha)
     print("probe alpha           :", args.probe_alpha)
     print("=" * 100)
 
-    task = api.PtychographyTask(
+    task = PtychographyTask(
         options,
         diffraction_data=measured,
         object_data=object_guess,
@@ -350,8 +389,11 @@ def main() -> None:
         probe_position_y_px=positions_centered_yx[:, 0],
     )
 
+    torch.cuda.synchronize()
     start = time.perf_counter()
+    print("Starting Pty-Chi ePIE run now...")
     task.run()
+    torch.cuda.synchronize()
     elapsed = time.perf_counter() - start
 
     object_final = task.get_data_to_cpu("object", as_numpy=True)
@@ -377,6 +419,9 @@ def main() -> None:
         "batch_size": int(args.batch_size),
         "object_alpha": float(args.object_alpha),
         "probe_alpha": float(args.probe_alpha),
+        "probe_power_before_scale": probe_power_before_scale,
+        "probe_power_after_scale": probe_power_after_scale,
+        "ptychi_remove_object_probe_ambiguity": True,
         "dx_angstrom_per_pixel": dx_A,
         "wavelength_angstrom": wavelength_A,
         "elapsed_seconds": elapsed,

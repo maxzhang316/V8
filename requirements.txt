@@ -3,9 +3,11 @@
 # Tested compatibility of the merged environment is NOT yet established.
 # Install a matching GPU-enabled PyTorch build first; see INSTALL_V8.md.
 # Public pins below accept an already installed matching +cuXXX build.
+--extra-index-url https://download.pytorch.org/whl/cu132
 
-torch==2.14.0
-torchvision==0.29.0
+# GPU-enabled PyTorch
+torch==2.14.0+cu132
+torchvision==0.29.0+cu132
 ptychi==2.1.0
 
 numpy==2.4.6
