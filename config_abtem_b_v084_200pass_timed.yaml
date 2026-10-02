@@ -11,7 +11,7 @@ forward:
   eps: 1.0e-10
 reconstruction:
   iterations: 200
-  batch_size: 32
+  batch_size: 100
   shuffle: true
   n_modes: 2
   probe_mode_init_power: 0.02
